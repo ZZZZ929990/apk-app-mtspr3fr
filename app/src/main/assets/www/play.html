@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>משחק</title>
+<style>
+  :root{color-scheme:dark}*{box-sizing:border-box}
+  body{margin:0;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:linear-gradient(160deg,#6d5efc,#22d3ee);color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:12px}
+  h1{font-size:20px;margin:0}#hud{font-size:15px;opacity:.92}
+  #board{display:grid;gap:2px;background:#0004;padding:6px;border-radius:16px;touch-action:none;user-select:none}
+  .c{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:min(5vw,20px);border-radius:5px;background:#ffffff10}
+  .w{background:#00000055}
+  #pad{display:grid;grid-template-columns:repeat(3,58px);gap:6px}
+  #pad button{height:52px;font-size:20px}
+  button{font:inherit;border:0;border-radius:14px;padding:10px 16px;background:#ffffff22;color:#fff}
+  a{color:#fff;font-size:13px;opacity:.85}#msg{font-size:17px;font-weight:700;min-height:22px}
+</style></head><body>
+<h1 id="ttl"></h1><div id="hud"></div><div id="board"></div><div id="msg"></div>
+<div id="pad">
+  <span></span><button data-d="u">▲</button><span></span>
+  <button data-d="r">▶</button><button id="rs">↺</button><button data-d="l">◀</button>
+  <span></span><button data-d="d">▼</button><span></span>
+</div>
+<a href="studio.html">← חזרה לסטודיו</a>
+<script>
+var idx=+((location.search.match(/g=(\d+)/)||[])[1]||0);
+var G=(JSON.parse(localStorage.getItem('myGames')||'[]'))[idx];
+if(!G){location.href='studio.html';}
+document.getElementById('ttl').textContent=G.emoji+' '+G.title;
+var board=document.getElementById('board'),hud=document.getElementById('hud'),msg=document.getElementById('msg');
+board.style.gridTemplateColumns='repeat('+G.cols+',minmax(0,1fr))';
+board.style.width='min(94vw,'+(G.cols*34)+'px)';
+var cells=[];for(var i=0;i<G.cols*G.rows;i++){var d=document.createElement('div');d.className='c';board.appendChild(d);cells.push(d);}
+var st;
+function reset(full){
+  st={grid:G.grid.slice(),player:{x:0,y:0},enemies:[],coins:0,over:false,
+      lives:full?G.lives:(st?st.lives:G.lives),start:Date.now()};
+  for(var y=0;y<G.rows;y++)for(var x=0;x<G.cols;x++){
+    var v=st.grid[y*G.cols+x];
+    if(v===5){st.player={x:x,y:y};st.grid[y*G.cols+x]=0;}
+    if(v===3){st.enemies.push({x:x,y:y});st.grid[y*G.cols+x]=0;}
+    if(v===2)st.coins++;}
+  msg.textContent='';draw();
+}
+function at(x,y){return (x<0||y<0||x>=G.cols||y>=G.rows)?1:st.grid[y*G.cols+x];}
+function draw(){
+  for(var y=0;y<G.rows;y++)for(var x=0;x<G.cols;x++){
+    var el=cells[y*G.cols+x],v=st.grid[y*G.cols+x],txt='',wall=false;
+    if(v===1){wall=true;txt='🧱';}if(v===2)txt='🪙';if(v===4)txt='🚪';
+    st.enemies.forEach(function(e){if(e.x===x&&e.y===y)txt='👾';});
+    if(st.player.x===x&&st.player.y===y)txt='🙂';
+    el.textContent=txt;el.className='c'+(wall?' w':'');}
+  var left=G.time?Math.max(0,G.time-Math.floor((Date.now()-st.start)/1000)):null;
+  hud.textContent='❤️ '+st.lives+(G.goal==='coins'?' · 🪙 '+st.coins:'')+(left!==null?' · ⏱ '+left:'');
+}
+function finish(win){st.over=true;msg.textContent=win?'ניצחת! 🎉':'הפסדת 😵 לחץ ↺';draw();}
+function check(){for(var i=0;i<st.enemies.length;i++){
+  if(st.enemies[i].x===st.player.x&&st.enemies[i].y===st.player.y){
+    st.lives--;if(st.lives<=0)return finish(false);
+    msg.textContent='נפגעת! נותרו '+st.lives;reset(false);return;}}}
+function move(dx,dy){
+  if(st.over)return;
+  var nx=st.player.x+dx,ny=st.player.y+dy;
+  if(at(nx,ny)===1)return;
+  st.player={x:nx,y:ny};
+  var v=st.grid[ny*G.cols+nx];
+  if(v===2){st.grid[ny*G.cols+nx]=0;st.coins--;}
+  if(v===4&&(G.goal==='reach'||(G.goal==='coins'&&st.coins===0)))return finish(true);
+  if(G.goal==='coins'&&st.coins===0&&st.grid.indexOf(4)===-1)return finish(true);
+  check();if(!st.over)draw();
+}
+document.querySelectorAll('[data-d]').forEach(function(b){
+  b.onclick=function(){var m={u:[0,-1],d:[0,1],l:[-1,0],r:[1,0]}[b.dataset.d];move(m[0],m[1]);};});
+document.getElementById('rs').onclick=function(){reset(true);};
+addEventListener('keydown',function(e){var m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];
+  if(m){e.preventDefault();move(m[0],m[1]);}});
+var sx=0,sy=0;
+board.addEventListener('touchstart',function(e){sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});
+board.addEventListener('touchend',function(e){
+  var dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
+  if(Math.abs(dx)<18&&Math.abs(dy)<18)return;
+  if(Math.abs(dx)>Math.abs(dy))move(dx>0?1:-1,0);else move(0,dy>0?1:-1);});
+reset(true);
+setInterval(function(){if(!st.over){
+  st.enemies.forEach(function(e){
+    var dirs=[[1,0],[-1,0],[0,1],[0,-1]].filter(function(d){return at(e.x+d[0],e.y+d[1])!==1;});
+    if(!dirs.length)return;
+    var s=dirs.sort(function(a,b){
+      return (Math.abs(e.x+a[0]-st.player.x)+Math.abs(e.y+a[1]-st.player.y))-
+             (Math.abs(e.x+b[0]-st.player.x)+Math.abs(e.y+b[1]-st.player.y));})[Math.random()<0.65?0:Math.floor(Math.random()*dirs.length)];
+    e.x+=s[0];e.y+=s[1];});
+  check();
+  if(G.time&&!st.over){var left=G.time-Math.floor((Date.now()-st.start)/1000);if(left<=0)finish(G.goal==='survive');}
+  if(!st.over)draw();}},Math.max(200,1100-G.speed*180));
+</script>
+</body></html>
